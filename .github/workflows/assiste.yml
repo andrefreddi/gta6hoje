@@ -1,0 +1,63 @@
+name: assiste
+# Baixa um vídeo (Instagram/YouTube/TikTok), extrai quadros e transcreve o áudio. Resultado vai como artifact "assiste".
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'link do vídeo'
+        required: true
+      fps:
+        description: 'quadros por segundo (padrão 0.5 = 1 a cada 2 s)'
+        required: false
+        default: '0.5'
+jobs:
+  assiste:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q yt-dlp faster-whisper
+      - name: Baixar
+        env:
+          URL: ${{ inputs.url }}
+        run: |
+          mkdir -p out
+          yt-dlp --no-playlist -f 'mp4/bestvideo*+bestaudio/best' --merge-output-format mp4 \
+            --write-info-json -o 'out/video.%(ext)s' "$URL"
+          ls -la out
+      - name: Quadros
+        run: |
+          mkdir -p out/frames
+          ffmpeg -loglevel error -i out/video.mp4 -vf "fps=${{ inputs.fps }},scale=512:-2" out/frames/f_%03d.jpg
+          ffprobe -v error -show_entries format=duration -of csv=p=0 out/video.mp4 > out/duracao.txt
+          ls out/frames | wc -l
+      - name: Transcrever
+        run: |
+          python - <<'EOF'
+          from faster_whisper import WhisperModel
+          import json
+          m = WhisperModel("small", device="cpu", compute_type="int8")
+          segs, info = m.transcribe("out/video.mp4", vad_filter=True)
+          linhas = [f"[{s.start:6.1f}-{s.end:6.1f}] {s.text.strip()}" for s in segs]
+          open("out/transcricao.txt", "w").write(f"idioma: {info.language} ({info.language_probability:.2f})\n" + "\n".join(linhas) + "\n")
+          print("\n".join(linhas))
+          EOF
+      - name: Metadados
+        run: |
+          python - <<'EOF'
+          import json
+          d = json.load(open([__import__('glob').glob('out/*.info.json')][0][0]))
+          keep = {k: d.get(k) for k in ['title','description','uploader','channel','upload_date','duration','view_count','like_count','comment_count','webpage_url']}
+          open('out/meta.json','w').write(json.dumps(keep, ensure_ascii=False, indent=2))
+          print(json.dumps(keep, ensure_ascii=False, indent=2))
+          EOF
+          rm -f out/*.info.json out/video.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assiste
+          path: out/
+          retention-days: 3
