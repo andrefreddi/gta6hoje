@@ -1,0 +1,32 @@
+name: gera
+on:
+  push:
+    paths: ['conteudo/**', 'templates/**']
+  workflow_dispatch:
+    inputs:
+      lote:
+        description: 'lote a (re)gerar, ex: lote03; vazio = todos os lotes novos'
+        required: false
+concurrency: fila
+permissions:
+  contents: write
+jobs:
+  gera:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Dependências (ffmpeg e fontes com emoji)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-core fonts-noto-color-emoji >/dev/null
+      - name: Gerar mídia
+        run: node scripts/gera.mjs ${{ inputs.lote }}
+      - name: Commit
+        run: |
+          git config user.name "gta6hoje-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add media fila.json
+          git diff --cached --quiet || (git commit -m "mídia gerada: $(date -u +%FT%TZ)" && git push)

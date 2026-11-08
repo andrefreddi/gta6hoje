@@ -1,0 +1,20 @@
+name: renova-token
+on:
+  schedule:
+    - cron: '0 12 * * 1'   # toda segunda; token dura 60 dias
+  workflow_dispatch:
+jobs:
+  renova:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Renovar token do Instagram e salvar no secret
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          resp=$(curl -sf "https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${IG_TOKEN}")
+          novo=$(echo "$resp" | jq -r .access_token)
+          exp=$(echo "$resp" | jq -r .expires_in)
+          [ -n "$novo" ] && [ "$novo" != "null" ] || { echo "falha ao renovar"; exit 1; }
+          echo "$novo" | gh secret set IG_TOKEN --repo "${{ github.repository }}"
+          echo "token renovado, expira em $((exp/86400)) dias"
