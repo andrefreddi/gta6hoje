@@ -56,12 +56,21 @@ def main():
     WORK.mkdir(parents=True, exist_ok=True)
     src = str(WORK / "src.mp4")
 
-    url = resolve_url(a.query)
-    if not url:
-        sys.exit("nao achei o video")
-    print("fonte:", url)
-    run(["yt-dlp", "--no-playlist", "-f", "mp4/bestvideo*+bestaudio/best",
-         "--merge-output-format", "mp4", "-o", src, url])
+    # 1) prefere um arquivo ja no repo (fornecido manualmente): fontes/<query>.mp4 ou fontes/trailer.mp4
+    local = None
+    for cand in [ROOT / "fontes" / f"{a.query}.mp4", ROOT / "fontes" / "trailer.mp4"]:
+        if cand.exists():
+            local = cand; break
+    if local:
+        print("fonte local:", local)
+        src = str(local)
+    else:
+        url = resolve_url(a.query)
+        if not url:
+            sys.exit("sem arquivo local e download indisponivel. coloque o trailer em fontes/trailer.mp4")
+        print("fonte:", url)
+        run(["yt-dlp", "--no-playlist", "-f", "mp4/bestvideo*+bestaudio/best",
+             "--merge-output-format", "mp4", "-o", src, url])
 
     dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                                 "-of", "csv=p=0", src], capture_output=True, text=True).stdout.strip())
