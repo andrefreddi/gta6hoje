@@ -1,0 +1,46 @@
+name: cortes
+# Baixa um trailer oficial e corta em clipes verticais 9:16 com legenda + marca; adiciona na fila como reels.
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: 'URL do video ou texto de busca (prefere canal Rockstar)'
+        required: false
+        default: 'Grand Theft Auto VI Launch Trailer'
+      n:
+        description: 'quantos clipes'
+        required: false
+        default: '6'
+      len:
+        description: 'duracao de cada clipe (s)'
+        required: false
+        default: '15'
+      prefixo:
+        description: 'prefixo do lote (ex: launch, trailer2)'
+        required: false
+        default: 'launch'
+concurrency: fila
+permissions:
+  contents: write
+jobs:
+  cortes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null
+          pip install -q yt-dlp
+      - name: Cortar
+        run: python scripts/cortes.py "${{ inputs.query }}" --n ${{ inputs.n }} --len ${{ inputs.len }} --prefixo ${{ inputs.prefixo }}
+      - name: Commit
+        run: |
+          git config user.name "gta6hoje-bot"
+          git config user.email "actions@users.noreply.github.com"
+          rm -rf _work_cortes
+          git add media fila.json
+          git diff --cached --quiet || (git commit -m "cortes gerados: $(date -u +%FT%TZ)" && git push)
