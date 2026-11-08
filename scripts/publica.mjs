@@ -3,8 +3,9 @@
 // Uso: node scripts/publica.mjs [--id lote02/03] [--dry-run]
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const API = 'https://graph.instagram.com/v27.0';
 const TOKEN = process.env.IG_TOKEN;
+// token EAA... (usuário do sistema, login unificado) usa graph.facebook.com; token IG... usa graph.instagram.com
+const API = (TOKEN || '').startsWith('IG') ? 'https://graph.instagram.com/v27.0' : 'https://graph.facebook.com/v27.0';
 const BASE = (process.env.MEDIA_BASE_URL || '').replace(/\/$/, '');
 const FILA = new URL('../fila.json', import.meta.url);
 const args = process.argv.slice(2);

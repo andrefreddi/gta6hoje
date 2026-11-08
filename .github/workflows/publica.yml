@@ -25,7 +25,7 @@ jobs:
       - name: Publicar próximo item
         env:
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
-          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_USER_ID: '17841447977803511'
           MEDIA_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
         run: |
           if [ -n "${{ inputs.id }}" ]; then node scripts/publica.mjs --id "${{ inputs.id }}"; else node scripts/publica.mjs; fi

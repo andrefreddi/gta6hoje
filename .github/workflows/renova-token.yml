@@ -1,7 +1,5 @@
 name: renova-token
 on:
-  schedule:
-    - cron: '0 12 * * 1'   # toda segunda; token dura 60 dias
   workflow_dispatch:
 jobs:
   renova:
