@@ -1,11 +1,15 @@
 name: publica
 on:
   schedule:
-    # horários de Brasília (UTC-3): 10h, 13h, 18h, 21h
-    - cron: '0 13 * * *'
+    # cadência acelerada até o lançamento: de 2 em 2h, 9h–23h BRT (UTC-3) = 12,14,16,18,20,22,00,02 UTC
+    - cron: '0 12 * * *'
+    - cron: '0 14 * * *'
     - cron: '0 16 * * *'
-    - cron: '0 21 * * *'
+    - cron: '0 18 * * *'
+    - cron: '0 20 * * *'
+    - cron: '0 22 * * *'
     - cron: '0 0 * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       id:
