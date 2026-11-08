@@ -1,15 +1,24 @@
 name: publica
 on:
   schedule:
-    # cadência acelerada até o lançamento: de 2 em 2h, 9h–23h BRT (UTC-3) = 12,14,16,18,20,22,00,02 UTC
-    - cron: '0 12 * * *'
-    - cron: '0 14 * * *'
-    - cron: '0 16 * * *'
-    - cron: '0 18 * * *'
-    - cron: '0 20 * * *'
-    - cron: '0 22 * * *'
-    - cron: '0 0 * * *'
-    - cron: '0 2 * * *'
+    # cadência agressiva-segura: de hora em hora, 8h–00h BRT (UTC-3) = 11..23,00,01,02,03 UTC
+    - cron: '5 11 * * *'
+    - cron: '5 12 * * *'
+    - cron: '5 13 * * *'
+    - cron: '5 14 * * *'
+    - cron: '5 15 * * *'
+    - cron: '5 16 * * *'
+    - cron: '5 17 * * *'
+    - cron: '5 18 * * *'
+    - cron: '5 19 * * *'
+    - cron: '5 20 * * *'
+    - cron: '5 21 * * *'
+    - cron: '5 22 * * *'
+    - cron: '5 23 * * *'
+    - cron: '5 0 * * *'
+    - cron: '5 1 * * *'
+    - cron: '5 2 * * *'
+    - cron: '5 3 * * *'
   workflow_dispatch:
     inputs:
       id:
