@@ -1,0 +1,36 @@
+name: reels
+# Gera reels com movimento + legenda, versao COM narracao (edge-tts PT-BR) e SEM, e poe na fila.
+on:
+  push:
+    paths: ['conteudo/reels*.json']
+  workflow_dispatch:
+    inputs:
+      nome:
+        description: 'arquivo de conteudo (ex: reels01)'
+        required: false
+        default: 'reels01'
+concurrency: fila
+permissions:
+  contents: write
+jobs:
+  reels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null
+          pip install -q edge-tts
+      - name: Gerar reels
+        run: python scripts/reels_narrados.py ${{ inputs.nome || 'reels01' }}
+      - name: Commit
+        run: |
+          git config user.name "gta6hoje-bot"
+          git config user.email "actions@users.noreply.github.com"
+          rm -rf _work_reels
+          git add media fila.json
+          git diff --cached --quiet || (git commit -m "reels narrados: $(date -u +%FT%TZ)" && git push)
