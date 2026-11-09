@@ -19,6 +19,14 @@ on:
         description: 'duracao maxima de cada clipe (s)'
         required: false
         default: '5'
+      voz:
+        description: 'voz edge (formato MPT: nome-Genero)'
+        required: false
+        default: 'fr-FR-RemyMultilingualNeural-Male'
+      gancho:
+        description: 'texto grande nos 3 primeiros segundos (vazio = sem)'
+        required: false
+        default: ''
 permissions:
   contents: write
 jobs:
@@ -115,7 +123,9 @@ jobs:
             --video-clip-duration ${{ inputs.duracao }} \
             --video-aspect 9:16 \
             --video-fit-mode cover \
-            --voice-name pt-BR-AntonioNeural-Male \
+            --voice-name "${{ inputs.voz }}" \
+            --subtitle-display-mode word_by_word \
+            --subtitle-animation pop_spring \
             --bgm-file "$BGM" \
             --bgm-volume 0.25 \
             --font-size 80 \
@@ -126,7 +136,14 @@ jobs:
           OUT=$(find storage/tasks/"$TID" -name 'final-*.mp4' | head -1)
           test -n "$OUT"
           mkdir -p "$GITHUB_WORKSPACE/out"
-          cp "$OUT" "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
+          if [ -n "${{ inputs.gancho }}" ]; then
+            # gancho: texto grande no topo nos 3 primeiros segundos (quebra em 2 linhas)
+            python3 -c "import textwrap,sys; open('/tmp/gancho.txt','w').write('\n'.join(textwrap.wrap(sys.argv[1], 18)))" "${{ inputs.gancho }}"
+            ffmpeg -loglevel error -y -i "$OUT" -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=/tmp/gancho.txt:fontcolor=white:fontsize=78:line_spacing=14:borderw=6:bordercolor=black:box=1:boxcolor=0xff2e88@0.85:boxborderw=28:x=(w-text_w)/2:y=230:enable='lt(t,3.2)'" \
+              -c:v libx264 -crf 19 -preset medium -c:a copy -movflags +faststart "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
+          else
+            cp "$OUT" "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
+          fi
           ffmpeg -loglevel error -y -i "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4" -vf "fps=1/3,scale=180:-2,tile=6x3" -frames:v 1 "$GITHUB_WORKSPACE/out/grade.jpg" || true
           ffprobe -v error -show_entries format=duration -of csv=p=0 "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
       - uses: actions/upload-artifact@v4
