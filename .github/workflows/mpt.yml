@@ -51,11 +51,21 @@ jobs:
         run: |
           mkdir -p mats
           if [ -n "${{ inputs.clipes }}" ]; then
-            MATS=""
-            for c in $(echo "${{ inputs.clipes }}" | tr ',' ' '); do
-              [ -f "mats/$c.mp4" ] || gh release download clipes-trailer --repo ${{ github.repository }} --dir mats --pattern "$c.mp4"
-              MATS="$MATS,$GITHUB_WORKSPACE/mats/$c.mp4"
+            # formato: c14@34-40,c20@38-44  (clipe@inicio-fim em segundos)
+            # recorta so a faixa central (tira marca OpusClip do topo e legenda queimada de baixo)
+            # e remonta 9:16 com fundo desfocado
+            mkdir -p src
+            MATS=""; n=0
+            for item in $(echo "${{ inputs.clipes }}" | tr ',' ' '); do
+              c="${item%@*}"; r="${item#*@}"; a="${r%-*}"; b="${r#*-}"
+              [ -f "src/$c.mp4" ] || gh release download clipes-trailer --repo ${{ github.repository }} --dir src --pattern "$c.mp4"
+              n=$((n+1)); o="$GITHUB_WORKSPACE/mats/s$(printf %02d $n).mp4"
+              ffmpeg -loglevel error -y -ss "$a" -to "$b" -i "src/$c.mp4" -an \
+                -vf "crop=iw:ih*0.29:0:ih*0.36,split[x][y];[x]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25[bg];[y]scale=-2:900,crop=1080:900[fg];[bg][fg]overlay=0:(H-h)/2,fps=30,format=yuv420p" \
+                -c:v libx264 -crf 18 "$o"
+              MATS="$MATS,$o"
             done
+            ffmpeg -loglevel error -y -i "$GITHUB_WORKSPACE/mats/s01.mp4" -frames:v 1 -vf scale=270:-2 "$GITHUB_WORKSPACE/mats/preview_s01.jpg" || true
             echo "MATS=${MATS#,}" >> "$GITHUB_ENV"
             echo "CONCAT=sequential" >> "$GITHUB_ENV"
           else
