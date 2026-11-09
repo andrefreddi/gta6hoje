@@ -1,0 +1,36 @@
+name: catalogo
+# Baixa os clipes do release e monta um catalogo visual (3 quadros por clipe) pra escolher cenas.
+on:
+  workflow_dispatch:
+jobs:
+  catalogo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dependencias
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Baixar clipes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p clipes out
+          gh release download clipes-trailer --repo ${{ github.repository }} --dir clipes --pattern 'c*.mp4'
+          ls clipes
+      - name: Catalogo
+        run: |
+          for f in clipes/c*.mp4; do
+            n=$(basename "$f" .mp4)
+            d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f")
+            echo "$n $d" >> out/duracoes.txt
+            for p in 0.15 0.5 0.85; do
+              t=$(python3 -c "print(round($d*$p,2))")
+              ffmpeg -loglevel error -y -ss "$t" -i "$f" -frames:v 1 -vf "scale=240:-2,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='$n':fontcolor=yellow:fontsize=22:x=6:y=6:box=1:boxcolor=black@0.6" "out/${n}_${p}.jpg"
+            done
+            ffmpeg -loglevel error -y -i "out/${n}_0.15.jpg" -i "out/${n}_0.5.jpg" -i "out/${n}_0.85.jpg" -filter_complex hstack=3 "out/${n}.jpg"
+            rm out/${n}_0.*.jpg
+          done
+          cat out/duracoes.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catalogo
+          path: out/
+          retention-days: 3

@@ -1,5 +1,5 @@
 name: mpt
-# Roda o MoneyPrinterTurbo (harry0703/MoneyPrinterTurbo) na nuvem: roteiro proprio + imagens locais de GTA + narracao PT + legenda + musica.
+# MoneyPrinterTurbo na nuvem: roteiro proprio + clipes do trailer (ou imagens oficiais) + narracao PT + legenda + musica animada.
 on:
   workflow_dispatch:
     inputs:
@@ -11,12 +11,20 @@ on:
         description: 'nome do video gerado (sem extensao)'
         required: false
         default: 'teoria01'
+      clipes:
+        description: 'clipes do release em ordem (ex: c02,c17,c25). Vazio = imagens oficiais'
+        required: false
+        default: ''
+      duracao:
+        description: 'duracao maxima de cada clipe (s)'
+        required: false
+        default: '5'
 permissions:
   contents: write
 jobs:
   mpt:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,15 +43,55 @@ jobs:
           git clone --depth 1 https://github.com/harry0703/MoneyPrinterTurbo.git mpt
           cd mpt
           pip install -q -r requirements.txt
+          pip install -q librosa
           cp config.example.toml config.toml
+      - name: Materiais
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p mats
+          if [ -n "${{ inputs.clipes }}" ]; then
+            MATS=""
+            for c in $(echo "${{ inputs.clipes }}" | tr ',' ' '); do
+              [ -f "mats/$c.mp4" ] || gh release download clipes-trailer --repo ${{ github.repository }} --dir mats --pattern "$c.mp4"
+              MATS="$MATS,$GITHUB_WORKSPACE/mats/$c.mp4"
+            done
+            echo "MATS=${MATS#,}" >> "$GITHUB_ENV"
+            echo "CONCAT=sequential" >> "$GITHUB_ENV"
+          else
+            MATS=$(ls "$GITHUB_WORKSPACE"/fontes/*.jpg | grep -E '/(featured|launch-trailer|onlyInLeonida|poster_full|screenshotsDesktop|ULTIMATE_EDITION|VINTAGE_VICE_CITY|GTAVI_FOB)' | paste -sd, -)
+            echo "MATS=$MATS" >> "$GITHUB_ENV"
+            echo "CONCAT=random" >> "$GITHUB_ENV"
+          fi
+      - name: Escolher musica mais animada
+        run: |
+          cd mpt
+          python - <<'EOF'
+          import glob, os, librosa, numpy as np
+          res = []
+          for f in sorted(glob.glob("resource/songs/*.mp3")):
+              try:
+                  y, sr = librosa.load(f, sr=22050, duration=60)
+                  tempo = float(np.atleast_1d(librosa.beat.beat_track(y=y, sr=sr)[0])[0])
+                  rms = float(np.mean(librosa.feature.rms(y=y)))
+                  bright = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
+                  res.append((f, tempo, rms, bright))
+              except Exception as e:
+                  print("erro", f, e)
+          t = np.array([r[1] for r in res]); r_ = np.array([r[2] for r in res]); b = np.array([r[3] for r in res])
+          z = lambda a: (a - a.mean()) / (a.std() + 1e-9)
+          score = z(t) + z(r_) + z(b)
+          order = np.argsort(-score)
+          for i in order[:8]:
+              print(f"{os.path.basename(res[i][0])} bpm={res[i][1]:.0f} rms={res[i][2]:.3f} brilho={res[i][3]:.0f} score={score[i]:.2f}")
+          best = res[order[0]][0]
+          open(os.environ["GITHUB_ENV"], "a").write(f"BGM={os.path.abspath(best)}\n")
+          EOF
       - name: Gerar video
         run: |
           cd mpt
-          # so imagens oficiais da Rockstar (exclui cheats.jpg, ps5.jpg, zuera03.jpg e afins)
-          MATS=$(ls "$GITHUB_WORKSPACE"/fontes/*.jpg | grep -E '/(featured|launch-trailer|onlyInLeonida|poster_full|screenshotsDesktop|ULTIMATE_EDITION|VINTAGE_VICE_CITY|GTAVI_FOB)' | paste -sd, -)
-          echo "materiais: $(echo "$MATS" | tr ',' '\n' | wc -l)"
           TID=$(python -c "import uuid; print(uuid.uuid4())")
-          echo "TID=$TID" >> "$GITHUB_ENV"
+          echo "musica: $BGM"
           python cli.py \
             --task-id "$TID" \
             --video-subject "Teorias de GTA 6" \
@@ -51,25 +99,26 @@ jobs:
             --video-language pt-BR \
             --video-source local \
             --video-materials "$MATS" \
+            --video-concat-mode "$CONCAT" \
             --image-motion zoom \
             --video-transition-mode none \
-            --video-clip-duration 4 \
-            --font-size 72 \
-            --stroke-color "#000000" \
-            --stroke-width 3 \
-            --subtitle-position bottom \
+            --video-clip-duration ${{ inputs.duracao }} \
             --video-aspect 9:16 \
+            --video-fit-mode cover \
             --voice-name pt-BR-AntonioNeural-Male \
-            --bgm-type random \
+            --bgm-file "$BGM" \
+            --bgm-volume 0.25 \
+            --font-size 80 \
+            --stroke-color "#000000" \
+            --stroke-width 4 \
+            --subtitle-position bottom \
             --subtitle-enabled
           OUT=$(find storage/tasks/"$TID" -name 'final-*.mp4' | head -1)
           test -n "$OUT"
           mkdir -p "$GITHUB_WORKSPACE/out"
           cp "$OUT" "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
-          # grade de quadros a cada 3s pra revisar (inclusive tela preta)
           ffmpeg -loglevel error -y -i "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4" -vf "fps=1/3,scale=180:-2,tile=6x3" -frames:v 1 "$GITHUB_WORKSPACE/out/grade.jpg" || true
-          ffmpeg -loglevel error -y -ss 6 -i "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4" -frames:v 1 -vf scale=540:-2 "$GITHUB_WORKSPACE/out/frame_6.jpg" || true
-          ffprobe -v error -show_entries format=duration:stream=codec_name,width,height -of compact "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
+          ffprobe -v error -show_entries format=duration -of csv=p=0 "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
       - uses: actions/upload-artifact@v4
         with:
           name: mpt
@@ -82,4 +131,4 @@ jobs:
           git config user.name "gta6hoje-bot"
           git config user.email "actions@users.noreply.github.com"
           git add media/mpt
-          git diff --cached --quiet || (git commit -m "mpt: ${{ inputs.saida }}" && git push)
+          git diff --cached --quiet || (git commit -m "mpt: ${{ inputs.saida }}" && git pull --rebase -q && git push)
