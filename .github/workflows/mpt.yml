@@ -1,0 +1,72 @@
+name: mpt
+# Roda o MoneyPrinterTurbo (harry0703/MoneyPrinterTurbo) na nuvem: roteiro proprio + imagens locais de GTA + narracao PT + legenda + musica.
+on:
+  workflow_dispatch:
+    inputs:
+      roteiro:
+        description: 'arquivo de roteiro em conteudo/'
+        required: false
+        default: 'mpt_teoria.txt'
+      saida:
+        description: 'nome do video gerado (sem extensao)'
+        required: false
+        default: 'teoria01'
+permissions:
+  contents: write
+jobs:
+  mpt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencias do sistema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg imagemagick fonts-dejavu-core >/dev/null
+      - name: Instalar MoneyPrinterTurbo
+        run: |
+          git clone --depth 1 https://github.com/harry0703/MoneyPrinterTurbo.git mpt
+          cd mpt
+          pip install -q -r requirements.txt
+          cp config.example.toml config.toml
+      - name: Gerar video
+        run: |
+          cd mpt
+          MATS=$(ls "$GITHUB_WORKSPACE"/fontes/*.jpg | paste -sd, -)
+          TID=$(python -c "import uuid; print(uuid.uuid4())")
+          echo "TID=$TID" >> "$GITHUB_ENV"
+          python cli.py \
+            --task-id "$TID" \
+            --video-subject "Teorias de GTA 6" \
+            --video-script "$(cat "$GITHUB_WORKSPACE/conteudo/${{ inputs.roteiro }}")" \
+            --video-language pt-BR \
+            --video-source local \
+            --video-materials "$MATS" \
+            --image-motion zoom \
+            --video-transition-mode fade-in \
+            --video-aspect 9:16 \
+            --voice-name pt-BR-AntonioNeural-Male \
+            --bgm-type random \
+            --subtitle-enabled
+          OUT=$(find storage/tasks/"$TID" -name 'final-*.mp4' | head -1)
+          test -n "$OUT"
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp "$OUT" "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
+          for s in 3 12 25; do ffmpeg -loglevel error -y -ss $s -i "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4" -frames:v 1 -vf scale=540:-2 "$GITHUB_WORKSPACE/out/frame_$s.jpg" || true; done
+          ffprobe -v error -show_entries format=duration:stream=codec_name,width,height -of compact "$GITHUB_WORKSPACE/out/${{ inputs.saida }}.mp4"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpt
+          path: out/
+          retention-days: 5
+      - name: Guardar video no repo (nao publica)
+        run: |
+          mkdir -p media/mpt
+          cp out/${{ inputs.saida }}.mp4 media/mpt/
+          git config user.name "gta6hoje-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add media/mpt
+          git diff --cached --quiet || (git commit -m "mpt: ${{ inputs.saida }}" && git push)
