@@ -1,28 +1,11 @@
 name: publica
 on:
   schedule:
-    # cadência agressiva-segura: de hora em hora, 8h–00h BRT (UTC-3) = 11..23,00,01,02,03 UTC
-    - cron: '5 11 * * *'
-    - cron: '5 12 * * *'
-    - cron: '5 13 * * *'
-    - cron: '5 14 * * *'
-    - cron: '5 15 * * *'
-    - cron: '5 16 * * *'
-    - cron: '5 17 * * *'
-    - cron: '5 18 * * *'
-    - cron: '5 19 * * *'
-    - cron: '5 20 * * *'
-    - cron: '5 21 * * *'
-    - cron: '5 22 * * *'
-    - cron: '5 23 * * *'
-    - cron: '5 0 * * *'
-    - cron: '5 1 * * *'
-    - cron: '5 2 * * *'
-    - cron: '5 3 * * *'
+    - cron: '0 */3 * * *'
   workflow_dispatch:
     inputs:
       id:
-        description: 'item específico (ex: lote02/03); vazio = próximo da fila'
+        description: 'item especifico (ex: clipes2/01); vazio = proximo'
         required: false
 concurrency: publica
 permissions:
@@ -35,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Publicar próximo item
+      - name: Publicar proximo item
         env:
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
           IG_USER_ID: '17841447977803511'

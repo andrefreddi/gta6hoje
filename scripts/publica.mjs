@@ -31,7 +31,7 @@ const fila = JSON.parse(readFileSync(FILA, 'utf8'));
 const item = idArg ? fila.find(x => `${x.lote}/${x.id}` === idArg) : fila.find(x => !x.publicado);
 if (!item) { console.log('fila vazia, nada a publicar'); process.exit(0); }
 
-const mediaUrl = `${BASE}/${item.arquivo}`;
+const mediaUrl = item.url ? item.url : `${BASE}/${item.arquivo}`;
 const head = await fetch(mediaUrl, { method: 'HEAD' });
 if (!head.ok) throw new Error(`mídia não acessível publicamente: ${mediaUrl} (${head.status})`);
 console.log(`item ${item.lote}/${item.id} (${item.tipo}) -> ${mediaUrl} [${head.headers.get('content-type')}]`);
