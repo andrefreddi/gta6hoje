@@ -1,0 +1,83 @@
+name: vozes
+# Gera a mesma frase com varias vozes (edge multilingual, kokoro, chatterbox) pra comparar.
+on:
+  workflow_dispatch:
+    inputs:
+      texto:
+        description: 'texto de teste'
+        required: false
+        default: 'Tem uma teoria sombria sobre o final do GTA 6 que pouca gente percebeu. Jason e Lucia foram inspirados em Bonnie e Clyde, o casal criminoso mais famoso da história. Será que a Rockstar vai ter coragem de repetir esse final?'
+jobs:
+  edge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Edge TTS
+        env: { TXT: "${{ inputs.texto }}" }
+        run: |
+          pip install -q edge-tts
+          mkdir -p out
+          edge-tts --list-voices | grep -iE 'pt-BR|Multilingual' | tee out/vozes_disponiveis.txt
+          gen() { edge-tts --voice "$1" --rate="$2" --pitch="$3" --text "$TXT" --write-media "out/$4.mp3" || echo "falhou $1"; }
+          gen pt-BR-AntonioNeural +0% +0Hz edge_01_antonio_atual
+          gen pt-BR-AntonioNeural -5% -12Hz edge_02_antonio_grave
+          for v in $(grep -oE '(pt-BR|en-US|fr-FR|it-IT)-[A-Za-z]+MultilingualNeural' out/vozes_disponiveis.txt | sort -u | grep -iE 'Macerio|Thalita|Andrew|Brian|Remy|Giuseppe|Florian|Ava'); do
+            gen "$v" -3% -6Hz "edge_ml_${v}"
+          done
+      - uses: actions/upload-artifact@v4
+        with: { name: vozes-edge, path: out/ }
+  kokoro:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Kokoro
+        env: { TXT: "${{ inputs.texto }}" }
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng ffmpeg >/dev/null
+          pip install -q "kokoro>=0.9.4" soundfile
+          mkdir -p out
+          python - <<'EOF'
+          import os, soundfile as sf, numpy as np
+          from kokoro import KPipeline
+          p = KPipeline(lang_code='p')
+          for v in ['pm_alex', 'pm_santa', 'pf_dora']:
+              try:
+                  chunks = [a for _, _, a in p(os.environ['TXT'], voice=v, speed=0.95)]
+                  sf.write(f'out/kokoro_{v}.wav', np.concatenate(chunks), 24000)
+                  print('ok', v)
+              except Exception as e:
+                  print('falhou', v, e)
+          EOF
+          for f in out/*.wav; do ffmpeg -loglevel error -y -i "$f" -b:a 128k "${f%.wav}.mp3" && rm "$f"; done
+      - uses: actions/upload-artifact@v4
+        with: { name: vozes-kokoro, path: out/ }
+  chatterbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Chatterbox multilingual
+        env: { TXT: "${{ inputs.texto }}" }
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q chatterbox-tts
+          mkdir -p out
+          python - <<'EOF'
+          import os, torchaudio as ta
+          from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+          m = ChatterboxMultilingualTTS.from_pretrained(device='cpu')
+          for nome, ex, cfg in [('padrao', 0.5, 0.5), ('dramatico', 0.8, 0.35), ('calmo', 0.3, 0.6)]:
+              try:
+                  wav = m.generate(os.environ['TXT'], language_id='pt', exaggeration=ex, cfg_weight=cfg)
+                  ta.save(f'out/chatterbox_{nome}.wav', wav, m.sr)
+                  print('ok', nome)
+              except Exception as e:
+                  print('falhou', nome, e)
+          EOF
+          for f in out/*.wav; do ffmpeg -loglevel error -y -i "$f" -b:a 128k "${f%.wav}.mp3" && rm "$f"; done
+      - uses: actions/upload-artifact@v4
+        with: { name: vozes-chatterbox, path: out/ }
